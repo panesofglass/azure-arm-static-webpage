@@ -1,5 +1,5 @@
 {
-    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
         "storageAccountType": {
@@ -51,7 +51,7 @@
         },
         "gitHtmlContentUri": {
             "type": "string",
-            "defaultValue": "https://github.com/sjkp/azure-arm-static-webpage.git",
+            "defaultValue": "https://github.com/panesofglass/azure-arm-static-webpage.git",
             "metadata": {
                 "description": "Uri to a github project that contains a dist folder with and index.html and other content that should be deployed"
             }
@@ -133,7 +133,7 @@
                         "name": "git",
                         "gitRepo": {
                             "directory": ".",
-                            "repository": "https://github.com/sjkp/azure-arm-static-webpage.git"
+                            "repository": "https://github.com/panesofglass/azure-arm-static-webpage.git"
                         }
                     },
                     {
