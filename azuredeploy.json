@@ -45,36 +45,14 @@
         }
     },
     "variables": {
-        "aciName": "[concat(parameters('baseName'), '-bootstrap')]",
-        "identityName": "[concat(parameters('baseName'), '-bootstrap')]",
         "storageAccountName": "[toLower(parameters('baseName'))]",
-        "bootstrapRoleAssignmentId": "[guid(concat(resourceGroup().id, 'contributor'))]",
-        "contributorRoleDefinitionId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+        "aciName": "[concat(parameters('baseName'), '-bootstrap')]",
         "containerName": "createweb",
         "image": "microsoft/azure-cli",
         "cpuCores": "1.0",
         "memoryInGb": "1.5"
     },
     "resources": [
-        {
-            "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
-            "name": "[variables('identityName')]",
-            "apiVersion": "2018-11-30",
-            "location": "[resourceGroup().location]"
-        },
-        {
-            "type": "Microsoft.Authorization/roleAssignments",
-            "name": "[variables('bootstrapRoleAssignmentId')]",
-            "apiVersion": "2017-09-01",
-            "dependsOn": [
-                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
-            ],
-            "properties": {
-                "roleDefinitionId": "[variables('contributorRoleDefinitionId')]",
-                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), '2018-11-30').principalId]",
-                "scope": "[resourceGroup().id]"
-            }
-        },
         {
             "type": "Microsoft.Storage/storageAccounts",
             "name": "[variables('storageAccountName')]",
@@ -105,16 +83,8 @@
             "apiVersion": "2018-10-01",
             "location": "[parameters('location')]",
             "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
-                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
-                "[resourceId('Microsoft.Authorization/roleAssignments', variables('bootstrapRoleAssignmentId'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]"
             ],
-            "identity": {
-                "type": "UserAssigned",
-                "userAssignedIdentities": {
-                    "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]": {}
-                }
-            },
             "properties": {
                 "osType": "Linux",
                 "restartPolicy": "Never",
