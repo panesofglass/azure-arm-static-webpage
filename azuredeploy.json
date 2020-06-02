@@ -2,37 +2,24 @@
     "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
+        "baseName": {
+            "type": "string",
+            "defaultValue": "[uniquestring(resourceGroup().id)]",
+            "metadata": {
+                "description": "Resource Name"
+            }
+        },
         "storageAccountType": {
             "type": "string",
             "defaultValue": "Standard_LRS",
             "allowedValues": [
                 "Standard_LRS",
                 "Standard_GRS",
-                "Standard_ZRS"
+                "Standard_ZRS",
+                "Standard_RAGRS"
             ],
             "metadata": {
                 "description": "Storage Account type"
-            }
-        },
-        "storageAccountName": {
-            "type": "string",
-            "defaultValue": "[uniquestring(resourceGroup().id)]",
-            "metadata": {
-                "description": "Storage Account Name"
-            }
-        },
-        "containerInstanceLocation": {
-            "type": "string",
-            "defaultValue": "[parameters('location')]",
-            "allowedValues": [
-                "westus",
-                "eastus",
-                "westeurope",
-                "southeastaisa",
-                "westus2"
-            ],
-            "metadata": {
-                "description": "Container Instance Location"
             }
         },
         "location": {
@@ -58,33 +45,79 @@
         }
     },
     "variables": {
+        "aciName": "[concat(parameters('baseName'), '-bootstrap')]",
+        "identityName": "[concat(parameters('baseName'), '-bootstrap')]",
+        "storageAccountName": "[toLower(parameters('baseName'))]",
+        "bootstrapRoleAssignmentId": "[guid(concat(resourceGroup().id, 'contributor'))]",
+        "contributorRoleDefinitionId": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+        "containerName": "createweb",
         "image": "microsoft/azure-cli",
         "cpuCores": "1.0",
-        "memoryInGb": "1.5",
-        "containerGroupName": "createweb-containerinstance",
-        "containerName": "createweb"
+        "memoryInGb": "1.5"
     },
     "resources": [
         {
+            "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+            "name": "[variables('identityName')]",
+            "apiVersion": "2018-11-30",
+            "location": "[resourceGroup().location]"
+        },
+        {
+            "type": "Microsoft.Authorization/roleAssignments",
+            "name": "[variables('bootstrapRoleAssignmentId')]",
+            "apiVersion": "2017-09-01",
+            "dependsOn": [
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]"
+            ],
+            "properties": {
+                "roleDefinitionId": "[variables('contributorRoleDefinitionId')]",
+                "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName')), '2018-11-30').principalId]",
+                "scope": "[resourceGroup().id]"
+            }
+        },
+        {
             "type": "Microsoft.Storage/storageAccounts",
-            "name": "[parameters('storageAccountName')]",
-            "apiVersion": "2017-10-01",
+            "name": "[variables('storageAccountName')]",
+            "apiVersion": "2018-07-01",
             "location": "[parameters('location')]",
+            "kind": "StorageV2",
             "sku": {
                 "name": "[parameters('storageAccountType')]"
             },
-            "kind": "StorageV2",
-            "properties": {}
+            "properties": {
+                "encryption": {
+                    "keySource": "Microsoft.Storage",
+                    "services": {
+                        "blob": {
+                            "enabled": true
+                        },
+                        "file": {
+                            "enabled": true
+                        }
+                    }
+                },
+                "supportsHttpsTrafficOnly": true
+            }
         },
         {
-            "name": "[variables('containerGroupName')]",
             "type": "Microsoft.ContainerInstance/containerGroups",
+            "name": "[variables('aciName')]",
             "apiVersion": "2018-10-01",
-            "location": "[parameters('containerInstanceLocation')]",
+            "location": "[parameters('location')]",
             "dependsOn": [
-                "[concat('Microsoft.Storage/storageAccounts/', parameters('storageAccountName'))]"
+                "[resourceId('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
+                "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]",
+                "[resourceId('Microsoft.Authorization/roleAssignments', variables('bootstrapRoleAssignmentId'))]"
             ],
+            "identity": {
+                "type": "UserAssigned",
+                "userAssignedIdentities": {
+                    "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', variables('identityName'))]": {}
+                }
+            },
             "properties": {
+                "osType": "Linux",
+                "restartPolicy": "Never",
                 "containers": [
                     {
                         "name": "[variables('containerName')]",
@@ -106,11 +139,11 @@
                             "environmentVariables": [
                                 {
                                     "name": "AZURE_STORAGE_KEY",
-                                    "value": "[listKeys(parameters('storageAccountName'),'2017-10-01').keys[0].value]"
+                                    "value": "[listKeys(variables('storageAccountName'),'2017-10-01').keys[0].value]"
                                 },
                                 {
                                     "name": "AZURE_STORAGE_ACCOUNT",
-                                    "value": "[parameters('storageAccountName')]"
+                                    "value": "[variables('storageAccountName')]"
                                 },
                                 {
                                     "name": "content",
@@ -126,8 +159,6 @@
                         }
                     }
                 ],
-                "restartPolicy": "Never",
-                "osType": "Linux",
                 "volumes": [
                     {
                         "name": "git",
@@ -149,7 +180,7 @@
     ],
     "outputs": {
         "WebUri": {
-            "value": "[reference(concat('Microsoft.Storage/storageAccounts/', parameters('storageAccountName')), '2018-07-01').primaryEndpoints.web]",
+            "value": "[reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), '2018-07-01').primaryEndpoints.web]",
             "type": "string"
         }
     }
