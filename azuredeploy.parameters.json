@@ -4,7 +4,7 @@
     "parameters": {   
 
       "contentZipUri": {
-        "value":  "https://html5up.net/paradigm-shift/download"
+        "value":  "http://html5up.net/paradigm-shift/download"
       }
     }
   }
