@@ -9,6 +9,13 @@
                 "description": "Resource Name"
             }
         },
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "Location for all resources."
+            }
+        },
         "storageAccountType": {
             "type": "string",
             "defaultValue": "Standard_LRS",
@@ -22,23 +29,31 @@
                 "description": "Storage Account type"
             }
         },
-        "location": {
-            "type": "string",
-            "defaultValue": "[resourceGroup().location]",
-            "metadata": {
-                "description": "Location for all resources."
-            }
-        },
         "contentZipUri": {
             "type":"string",
             "defaultValue": "",
             "metadata": {
                 "description": "Uri to a zip file containing a static web page that should be extracted and uploaded to azure static web"
             }
+        },
+        "CDNSku": {
+            "type": "string",
+            "metadata": {
+                "description": "CDN SKU names"
+            },
+            "defaultValue": "Standard_Akamai",
+            "allowedValues": [
+                "Standard_Akamai",
+                "Standard_Verizon",
+                "Premium_Verizon",
+                "Standard_Microsoft"
+            ]
         }
     },
     "variables": {
         "storageAccountName": "[toLower(parameters('baseName'))]",
+        "endpointName": "[concat(parameters('baseName'), '-public')]",
+        "profileName": "[concat(parameters('baseName'), '-cdn')]",
         "aciName": "[concat(parameters('baseName'), '-bootstrap')]",
         "containerName": "bootstrap",
         "image": "mcr.microsoft.com/azure-cli",
@@ -51,11 +66,12 @@
             "name": "[variables('storageAccountName')]",
             "apiVersion": "2018-07-01",
             "location": "[parameters('location')]",
-            "kind": "StorageV2",
             "sku": {
                 "name": "[parameters('storageAccountType')]"
             },
+            "kind": "StorageV2",
             "properties": {
+                "accessTier": "Hot",
                 "encryption": {
                     "keySource": "Microsoft.Storage",
                     "services": {
@@ -67,7 +83,24 @@
                         }
                     }
                 },
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "virtualNetworkRules": [],
+                    "ipRules": [],
+                    "defaultAction": "Allow"
+                },
                 "supportsHttpsTrafficOnly": true
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts/blobServices/containers",
+            "apiVersion": "2019-06-01",
+            "name": "[concat(variables('storageAccountName'), '/default/$web')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+            ],
+            "properties": {
+                "publicAccess": "Blob"
             }
         },
         {
@@ -89,12 +122,12 @@
                             "command": [
                                 "/bin/sh",
                                 "-c",
-                                "[concat('az extension add -n storage-preview -y && az storage blob service-properties update --account-name ', variables('storageAccountName'), ' --static-website --404-document error.html --index-document index.html && wget --no-check-certificate ', parameters('contentZipUri'), ' -O content.zip && echo \"mkdir dist\" && mkdir dist && unzip content.zip -d dist && az storage blob upload-batch -s dist -d \"\\$web\"')]"
+                                "[concat('az extension add -n storage-preview -y && az storage blob service-properties update --account-name ', variables('storageAccountName'), ' --static-website --404-document error.html --index-document index.html && wget --no-check-certificate ', parameters('contentZipUri'), ' -O content.zip && mkdir dist && unzip content.zip -d dist && az storage blob upload-batch -s dist -d \"\\$web\"')]"
                             ],
                             "environmentVariables": [
                                 {
                                     "name": "AZURE_STORAGE_KEY",
-                                    "value": "[listKeys(variables('storageAccountName'),'2017-10-01').keys[0].value]"
+                                    "value": "[listKeys(variables('storageAccountName'),'2018-07-01').keys[0].value]"
                                 },
                                 {
                                     "name": "AZURE_STORAGE_ACCOUNT",
@@ -111,12 +144,70 @@
                     }
                 ]
             }
+        },
+        {
+            "name": "[variables('profileName')]",
+            "type": "Microsoft.Cdn/profiles",
+            "location": "[parameters('location')]",
+            "apiVersion": "2019-12-31",
+            "tags": {
+                "displayName": "[variables('profileName')]"
+            },
+            "sku": {
+                "name": "[parameters('CDNSku')]"
+            },
+            "properties": {},
+            "resources": [
+                {
+                    "apiVersion": "2019-12-31",
+                    "type": "endpoints",
+                    "name": "[variables('endpointName')]",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Cdn/profiles', variables('profileName'))]",
+                        "[resourceId('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]"
+                    ],
+                    "location": "[parameters('location')]",
+                    "tags": {
+                        "displayName": "[variables('endpointName')]"
+                    },
+                    "properties": {
+                        "originHostHeader": "[replace(replace(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), '2018-07-01').primaryEndpoints.web,'https://',''),'/','')]",
+                        "isHttpAllowed": true,
+                        "isHttpsAllowed": true,
+                        "queryStringCachingBehavior": "IgnoreQueryString",
+                        "contentTypesToCompress": [
+                            "text/plain",
+                            "text/html",
+                            "text/css",
+                            "application/x-javascript",
+                            "text/javascript"
+                        ],
+                        "isCompressionEnabled": true,
+                        "origins": [
+                            {
+                                "name": "origin1",
+                                "properties": {
+                                    "hostName": "[replace(replace(reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), '2018-07-01').primaryEndpoints.web,'https://',''),'/','')]"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
         }
     ],
     "outputs": {
-        "WebUri": {
+        "webUri": {
             "value": "[reference(concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName')), '2018-07-01').primaryEndpoints.web]",
             "type": "string"
+        },
+        "hostName": {
+            "type": "string",
+            "value": "[reference(variables('endpointName')).hostName]"
+        },
+        "originHostHeader": {
+            "type": "string",
+            "value": "[reference(variables('endpointName')).originHostHeader]"
         }
     }
 }
