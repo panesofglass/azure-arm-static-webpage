@@ -35,20 +35,13 @@
             "metadata": {
                 "description": "Uri to a zip file containing a static web page that should be extracted and uploaded to azure static web"
             }
-        },
-        "gitHtmlContentUri": {
-            "type": "string",
-            "defaultValue": "https://github.com/panesofglass/azure-arm-static-webpage.git",
-            "metadata": {
-                "description": "Uri to a github project that contains a dist folder with and index.html and other content that should be deployed"
-            }
         }
     },
     "variables": {
         "storageAccountName": "[toLower(parameters('baseName'))]",
         "aciName": "[concat(parameters('baseName'), '-bootstrap')]",
-        "containerName": "createweb",
-        "image": "microsoft/azure-cli",
+        "containerName": "bootstrap",
+        "image": "mcr.microsoft.com/azure-cli",
         "cpuCores": "1.0",
         "memoryInGb": "1.5"
     },
@@ -94,17 +87,9 @@
                         "properties": {
                             "image": "[variables('image')]",
                             "command": [
-                                "[if(greater(length(parameters('contentZipUri')),0), '/mnt/github/runzip.sh','/mnt/github/run.sh')]"
-                            ],
-                            "volumeMounts": [
-                                {
-                                    "name": "git",
-                                    "mountPath": "/mnt/github"
-                                },
-                                {
-                                    "name": "content",
-                                    "mountPath": "/mnt/content"
-                                }
+                                "/bin/sh",
+                                "-c",
+                                "[concat('az extension add -n storage-preview -y && az storage blob service-properties update --account-name ', variables('storageAccountName'), ' --static-website --404-document error.html --index-document index.html && wget --no-check-certificate ', parameters('contentZipUri'), ' -O content.zip && echo \"mkdir dist\" && mkdir dist && unzip content.zip -d dist && az storage blob upload-batch -s dist -d \"\\$web\"')]"
                             ],
                             "environmentVariables": [
                                 {
@@ -114,10 +99,6 @@
                                 {
                                     "name": "AZURE_STORAGE_ACCOUNT",
                                     "value": "[variables('storageAccountName')]"
-                                },
-                                {
-                                    "name": "content",
-                                    "value": "[parameters('contentZipUri')]"
                                 }
                             ],
                             "resources": {
@@ -126,22 +107,6 @@
                                     "memoryInGb": "[variables('memoryInGb')]"
                                 }
                             }
-                        }
-                    }
-                ],
-                "volumes": [
-                    {
-                        "name": "git",
-                        "gitRepo": {
-                            "directory": ".",
-                            "repository": "https://github.com/panesofglass/azure-arm-static-webpage.git"
-                        }
-                    },
-                    {
-                        "name": "content",
-                        "gitRepo": {
-                            "directory": ".",
-                            "repository": "[parameters('gitHtmlContentUri')]"
                         }
                     }
                 ]
