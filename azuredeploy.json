@@ -29,11 +29,18 @@
                 "description": "Storage Account type"
             }
         },
-        "contentZipUri": {
+        "gitContentUri": {
             "type":"string",
             "defaultValue": "",
             "metadata": {
-                "description": "Uri to a zip file containing a static web page that should be extracted and uploaded to azure static web"
+                "description": "Uri to a git repository containing a static web site that should be published to azure static web"
+            }
+        },
+        "gitContentDir": {
+            "type":"string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Name of the output folder that should be published to azure static web"
             }
         },
         "CDNSku": {
@@ -56,7 +63,7 @@
         "profileName": "[concat(parameters('baseName'), '-cdn')]",
         "aciName": "[concat(parameters('baseName'), '-bootstrap')]",
         "containerName": "bootstrap",
-        "image": "mcr.microsoft.com/azure-cli",
+        "image": "node:12",
         "cpuCores": "1.0",
         "memoryInGb": "1.5"
     },
@@ -122,7 +129,7 @@
                             "command": [
                                 "/bin/sh",
                                 "-c",
-                                "[concat('az extension add -n storage-preview -y && az storage blob service-properties update --account-name ', variables('storageAccountName'), ' --static-website --404-document error.html --index-document index.html && wget --no-check-certificate ', parameters('contentZipUri'), ' -O content.zip && mkdir dist && unzip content.zip -d dist && az storage blob upload-batch -s dist -d \"\\$web\"')]"
+                                "[concat('curl -sL https://aka.ms/InstallAzureCLIDeb | bash && az extension add -n storage-preview -y && az storage blob service-properties update --account-name ', variables('storageAccountName'), ' --static-website --404-document error.html --index-document index.html && cd /mnt/git && (test -f package.json && { npm install; npm run build; } || true) && az storage blob upload-batch -s ', parameters('gitContentDir'), ' -d \"\\$web\"')]"
                             ],
                             "environmentVariables": [
                                 {
@@ -139,7 +146,22 @@
                                     "cpu": "[variables('cpuCores')]",
                                     "memoryInGb": "[variables('memoryInGb')]"
                                 }
-                            }
+                            },
+                            "volumeMounts": [
+                                {
+                                    "name": "git",
+                                    "mountPath": "/mnt/git"
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "git",
+                        "gitRepo": {
+                            "directory": ".",
+                            "repository": "[parameters('gitContentUri')]"
                         }
                     }
                 ]
