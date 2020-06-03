@@ -127,11 +127,11 @@
                             "environmentVariables": [
                                 {
                                     "name": "AZURE_STORAGE_KEY",
-                                    "value": "[listKeys(variables('storageAccountName'),'2018-07-01').keys[0].value]"
+                                    "secureValue": "[listKeys(variables('storageAccountName'),'2018-07-01').keys[0].value]"
                                 },
                                 {
                                     "name": "AZURE_STORAGE_ACCOUNT",
-                                    "value": "[variables('storageAccountName')]"
+                                    "secureValue": "[variables('storageAccountName')]"
                                 }
                             ],
                             "resources": {
